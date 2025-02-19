@@ -27,7 +27,7 @@ jobs:
         docker create --name builder-riscv64-container builder-riscv64
         docker cp builder-riscv64-container:/opt/build/ollama ./ollama
         docker rm builder-riscv64-container
-        mkdir dist && mv ./ollama ./dist/
+        mkdir dist && mv ./ollama ./dist/dist-linux-risc64
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4
