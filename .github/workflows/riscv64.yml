@@ -1,9 +1,12 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-name: Build RISC-V ollama
+name: Build RISC-V Rollama
 on:
   push:
     branches: [ "feature/riscv64-cpu-only" ]
+    tags:
+      - 'v*'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,23 +21,52 @@ jobs:
     - name: Set Version
       shell: bash
       run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
-    # - name: generate
-    #   run: |
-    #     export GOARCH=riscv64
-    #     go generate ./...
-    # - name: Build
-    #   run: |
-    #     export GOARCH=riscv64 
-    #     go build -v .
     - name: Build
       run: |
         docker build -t builder-riscv64 -f Dockerfile-build .
         docker create --name builder-riscv64-container builder-riscv64
         docker cp builder-riscv64-container:/opt/build/ollama ./ollama
         docker rm builder-riscv64-container
+        mkdir dist && mv ./ollama ./dist/
 
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ollama-riscv64
+        name: dist-linux-ollama-riscv64
         path: ollama
+
+  release:
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-linux-*
+          path: dist
+          merge-multiple: true
+      - run: find . -type f -not -name 'sha256sum.txt' | xargs sha256sum | tee sha256sum.txt
+        working-directory: dist
+      - name: Create or update Release
+        run: |
+          RELEASE_VERSION="$(echo ${GITHUB_REF_NAME} | cut -f1 -d-)"
+
+          echo "Looking for existing release for ${RELEASE_VERSION}"
+          OLD_TAG=$(gh release ls --json name,tagName | jq -r ".[] | select(.name == \"${RELEASE_VERSION}\") | .tagName")
+          if [ -n "$OLD_TAG" ]; then
+            echo "Updating release ${RELEASE_VERSION} to point to new tag ${GITHUB_REF_NAME}"
+            gh release edit ${OLD_TAG} --tag ${GITHUB_REF_NAME}
+          else
+            echo "Creating new release ${RELEASE_VERSION} pointing to tag ${GITHUB_REF_NAME}"
+            gh release create ${GITHUB_REF_NAME} \
+              --title ${RELEASE_VERSION} \
+              --draft \
+              --generate-notes \
+              --prerelease
+          fi
+          echo "Uploading artifacts for tag ${GITHUB_REF_NAME}"
+          gh release upload ${GITHUB_REF_NAME} dist/* --clobber
