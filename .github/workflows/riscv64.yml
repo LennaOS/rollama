@@ -3,7 +3,6 @@
 name: Build RISC-V Rollama
 on:
   push:
-    branches: [ "feature/riscv64-cpu-only" ]
     tags:
       - 'v*'
 
