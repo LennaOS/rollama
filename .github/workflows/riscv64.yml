@@ -33,7 +33,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: dist-linux-ollama-riscv64
-        path: ollama
+        path: dist
 
   release:
     needs: [build]
